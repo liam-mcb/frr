@@ -66,6 +66,7 @@ void pim_msdp_pkt_ka_tx(struct pim_msdp_peer *mp);
 int pim_msdp_read(struct thread *thread);
 void pim_msdp_pkt_sa_tx(struct pim_instance *pim);
 void pim_msdp_pkt_sa_tx_one(struct pim_msdp_sa *sa);
+void pim_msdp_pkt_sa_tx_one_to_other_peers(struct pim_msdp_sa *sa);
 void pim_msdp_pkt_sa_tx_to_one_peer(struct pim_msdp_peer *mp);
 
 #endif

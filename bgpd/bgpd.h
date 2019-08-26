@@ -124,8 +124,8 @@ struct bgp_master {
 	/* BGP port number.  */
 	uint16_t port;
 
-	/* Listener address */
-	char *address;
+	/* Listener addresses */
+	struct list *addresses;
 
 	/* The Mac table */
 	struct hash *self_mac_hash;

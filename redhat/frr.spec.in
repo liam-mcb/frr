@@ -172,7 +172,6 @@ BuildRequires:  python27-sphinx
 BuildRequires:  python-devel >= 2.7
 BuildRequires:  python-sphinx
 %endif
-Requires:       initscripts
 %if %{with_pam}
 BuildRequires:  pam-devel
 %endif
@@ -656,8 +655,6 @@ fi
 
 %files pythontools
 %{_sbindir}/frr-reload.py
-%{_sbindir}/frr-reload.pyc
-%{_sbindir}/frr-reload.pyo
 
 
 %files devel

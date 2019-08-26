@@ -373,7 +373,7 @@ int main(int argc, char **argv)
 	int tmp_port;
 
 	int bgp_port = BGP_PORT_DEFAULT;
-	char *bgp_address = NULL;
+	struct list *bgp_addresses = list_new();
 	int no_fib_flag = 0;
 	int no_zebra_flag = 0;
 	int skip_runas = 0;
@@ -426,7 +426,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case 'l':
-			bgp_address = optarg;
+			listnode_add(bgp_addresses, optarg);
 		/* listenon implies -n */
 		/* fallthru */
 		case 'n':
@@ -457,7 +457,7 @@ int main(int argc, char **argv)
 	bm->port = bgp_port;
 	if (bgp_port == 0)
 		bgp_option_set(BGP_OPT_NO_LISTEN);
-	bm->address = bgp_address;
+	bm->addresses = bgp_addresses;
 	if (no_fib_flag || no_zebra_flag)
 		bgp_option_set(BGP_OPT_NO_FIB);
 	if (no_zebra_flag)
@@ -470,7 +470,7 @@ int main(int argc, char **argv)
 	bgp_init((unsigned short)instance);
 
 	snprintf(bgpd_di.startinfo, sizeof(bgpd_di.startinfo), ", bgp@%s:%d",
-		 (bm->address ? bm->address : "<all>"), bm->port);
+		 (bm->addresses ? bm->addresses : "<all>"), bm->port);
 
 	frr_config_fork();
 	/* must be called after fork() */

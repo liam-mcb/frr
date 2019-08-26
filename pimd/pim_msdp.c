@@ -395,14 +395,21 @@ void pim_msdp_sa_ref(struct pim_instance *pim, struct pim_msdp_peer *mp,
 
 	/* reference it */
 	if (mp) {
+		bool new_sa = false;
+
 		if (!(sa->flags & PIM_MSDP_SAF_PEER)) {
 			sa->flags |= PIM_MSDP_SAF_PEER;
+			new_sa = true;
 			if (PIM_DEBUG_MSDP_EVENTS) {
 				zlog_debug("MSDP SA %s added by peer",
 					   sa->sg_str);
 			}
 		}
 		pim_msdp_sa_peer_ip_set(sa, mp, rp);
+		/* Immediately forward new SA to other peers (must be done after SA peer is set) */
+		if (new_sa) {
+			pim_msdp_pkt_sa_tx_one_to_other_peers(sa);
+		}
 		/* start/re-start the state timer to prevent cache expiry */
 		pim_msdp_sa_state_timer_setup(sa, true /* start */);
 		/* We re-evaluate SA "SPT-trigger" everytime we hear abt it from
@@ -720,7 +727,15 @@ static int pim_msdp_sa_comp(const void *p1, const void *p2)
 /* XXX: this can use a bit of refining and extensions */
 bool pim_msdp_peer_rpf_check(struct pim_msdp_peer *mp, struct in_addr rp)
 {
+	struct pim_nexthop nexthop;
+
 	if (mp->peer.s_addr == rp.s_addr) {
+		return true;
+	}
+
+	/* Check if the MSDP peer is the nexthop for the RP */
+	if (pim_nexthop_lookup(mp->pim, &nexthop, rp, 0) &&
+	    nexthop.mrib_nexthop_addr.u.prefix4.s_addr == mp->peer.s_addr) {
 		return true;
 	}
 
@@ -1525,12 +1540,23 @@ enum pim_msdp_err pim_msdp_mg_src_add(struct pim_instance *pim,
 int pim_msdp_config_write(struct pim_instance *pim, struct vty *vty,
 			  const char *spaces)
 {
+	struct listnode *mpnode;
+	struct pim_msdp_peer *mp;
 	struct listnode *mbrnode;
 	struct pim_msdp_mg_mbr *mbr;
 	struct pim_msdp_mg *mg = pim->msdp.mg;
+	char peer_str[INET_ADDRSTRLEN];
 	char mbr_str[INET_ADDRSTRLEN];
 	char src_str[INET_ADDRSTRLEN];
 	int count = 0;
+
+	for (ALL_LIST_ELEMENTS_RO(pim->msdp.peer_list, mpnode, mp)) {
+		pim_inet4_dump("<peer?>", mp->peer, peer_str, sizeof(peer_str));
+		pim_inet4_dump("<local?>", mp->local, src_str, sizeof(src_str));
+		vty_out(vty, "%sip msdp peer %s source %s\n", spaces,
+			peer_str, src_str);
+		++count;
+	}
 
 	if (!mg) {
 		return count;

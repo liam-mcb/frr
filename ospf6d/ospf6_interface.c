@@ -190,7 +190,7 @@ struct ospf6_interface *ospf6_interface_create(struct interface *ifp)
 	oi->hello_interval = OSPF_HELLO_INTERVAL_DEFAULT;
 	oi->dead_interval = OSPF_ROUTER_DEAD_INTERVAL_DEFAULT;
 	oi->rxmt_interval = OSPF_RETRANSMIT_INTERVAL_DEFAULT;
-	oi->type = ospf6_default_iftype(ifp);
+	oi->type = OSPF_IFTYPE_NONE;
 	oi->state = OSPF6_INTERFACE_DOWN;
 	oi->flag = 0;
 	oi->mtu_ignore = 0;
@@ -746,6 +746,10 @@ int interface_up(struct thread *thread)
 		return 0;
 	}
 #endif /* __FreeBSD__ */
+
+	/* If undefined, set iftype as default for the interface */
+	if (oi->type == OSPF_IFTYPE_NONE)
+		oi->type = ospf6_default_iftype(oi->interface);
 
 	/* Join AllSPFRouters */
 	if (ospf6_sso(oi->interface->ifindex, &allspfrouters6, IPV6_JOIN_GROUP)

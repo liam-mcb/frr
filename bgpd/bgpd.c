@@ -119,12 +119,20 @@ extern struct zclient *zclient;
 static int bgp_check_main_socket(bool create, struct bgp *bgp)
 {
 	static int bgp_server_main_created;
+	struct listnode *node;
+	char *address;
 
 	if (create) {
 		if (bgp_server_main_created)
 			return 0;
-		if (bgp_socket(bgp, bm->port, bm->address) < 0)
-			return BGP_ERR_INVALID_VALUE;
+		if (list_isempty(bm->addresses)) {
+			if (bgp_socket(bgp, bm->port, NULL) < 0)
+				return BGP_ERR_INVALID_VALUE;
+		} else {
+			for (ALL_LIST_ELEMENTS_RO(bm->addresses, node, address))
+				if (bgp_socket(bgp, bm->port, address) < 0)
+					return BGP_ERR_INVALID_VALUE;
+		}
 		bgp_server_main_created = 1;
 		return 0;
 	}
@@ -3128,7 +3136,8 @@ struct bgp *bgp_get_evpn(void)
 int bgp_handle_socket(struct bgp *bgp, struct vrf *vrf, vrf_id_t old_vrf_id,
 		      bool create)
 {
-	int ret = 0;
+	struct listnode *node;
+	char *address;
 
 	/* Create BGP server socket, if listen mode not disabled */
 	if (!bgp || bgp_option_check(BGP_OPT_NO_LISTEN))
@@ -3157,9 +3166,14 @@ int bgp_handle_socket(struct bgp *bgp, struct vrf *vrf, vrf_id_t old_vrf_id,
 		 */
 		if (vrf->vrf_id == VRF_UNKNOWN)
 			return 0;
-		ret = bgp_socket(bgp, bm->port, bm->address);
-		if (ret < 0)
-			return BGP_ERR_INVALID_VALUE;
+		if (list_isempty(bm->addresses)) {
+			if (bgp_socket(bgp, bm->port, NULL) < 0)
+				return BGP_ERR_INVALID_VALUE;
+		} else {
+			for (ALL_LIST_ELEMENTS_RO(bm->addresses, node, address))
+				if (bgp_socket(bgp, bm->port, address) < 0)
+					return BGP_ERR_INVALID_VALUE;
+		}
 		return 0;
 	} else
 		return bgp_check_main_socket(create, bgp);

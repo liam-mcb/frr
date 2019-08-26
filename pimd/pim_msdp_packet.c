@@ -348,7 +348,8 @@ static void pim_msdp_pkt_sa_push(struct pim_instance *pim,
 	}
 }
 
-static int pim_msdp_pkt_sa_fill_hdr(struct pim_instance *pim, int local_cnt)
+static int pim_msdp_pkt_sa_fill_hdr(struct pim_instance *pim, int local_cnt,
+				    struct in_addr rp)
 {
 	int curr_tlv_ecnt;
 
@@ -361,7 +362,7 @@ static int pim_msdp_pkt_sa_fill_hdr(struct pim_instance *pim, int local_cnt)
 	stream_putw(pim->msdp.work_obuf,
 		    PIM_MSDP_SA_ENTRY_CNT2SIZE(curr_tlv_ecnt));
 	stream_putc(pim->msdp.work_obuf, curr_tlv_ecnt);
-	stream_put_ipv4(pim->msdp.work_obuf, pim->msdp.originator_id.s_addr);
+	stream_put_ipv4(pim->msdp.work_obuf, rp.s_addr);
 
 	return local_cnt;
 }
@@ -387,7 +388,8 @@ static void pim_msdp_pkt_sa_gen(struct pim_instance *pim,
 		zlog_debug("  sa gen  %d", local_cnt);
 	}
 
-	local_cnt = pim_msdp_pkt_sa_fill_hdr(pim, local_cnt);
+	local_cnt = pim_msdp_pkt_sa_fill_hdr(pim, local_cnt,
+					     pim->msdp.originator_id);
 
 	for (ALL_LIST_ELEMENTS_RO(pim->msdp.sa_list, sanode, sa)) {
 		if (!(sa->flags & PIM_MSDP_SAF_LOCAL)) {
@@ -408,7 +410,8 @@ static void pim_msdp_pkt_sa_gen(struct pim_instance *pim,
 				zlog_debug("  sa gen for remainder %d",
 					   local_cnt);
 			}
-			local_cnt = pim_msdp_pkt_sa_fill_hdr(pim, local_cnt);
+			local_cnt = pim_msdp_pkt_sa_fill_hdr(
+				pim, local_cnt, pim->msdp.originator_id);
 		}
 	}
 
@@ -416,6 +419,31 @@ static void pim_msdp_pkt_sa_gen(struct pim_instance *pim,
 		pim_msdp_pkt_sa_push(pim, mp);
 	}
 	return;
+}
+
+static void pim_msdp_pkt_fwd_sa_gen(struct pim_instance *pim)
+{
+	struct listnode *sanode;
+	struct pim_msdp_sa *sa;
+
+	/* Send all remote SAs individually. This is allowed by RFC 3618,
+	 * but it is recommended to batch entries from the same RP */
+	for (ALL_LIST_ELEMENTS_RO(pim->msdp.sa_list, sanode, sa)) {
+		struct listnode *mpnode;
+		struct pim_msdp_peer *mp;
+
+		if (sa->flags & PIM_MSDP_SAF_LOCAL) {
+			continue;
+		}
+		pim_msdp_pkt_sa_fill_hdr(pim, 1 /* cnt */,  sa->rp);
+		pim_msdp_pkt_sa_fill_one(sa);
+		for (ALL_LIST_ELEMENTS_RO(pim->msdp.peer_list, mpnode, mp)) {
+			/* Don't forward to peer which SA was received from */
+			if (mp->peer.s_addr != sa->peer.s_addr) {
+				pim_msdp_pkt_sa_push_to_one_peer(pim, mp);
+			}
+		}
+	}
 }
 
 static void pim_msdp_pkt_sa_tx_done(struct pim_instance *pim)
@@ -436,14 +464,33 @@ static void pim_msdp_pkt_sa_tx_done(struct pim_instance *pim)
 void pim_msdp_pkt_sa_tx(struct pim_instance *pim)
 {
 	pim_msdp_pkt_sa_gen(pim, NULL /* mp */);
+	pim_msdp_pkt_fwd_sa_gen(pim);
 	pim_msdp_pkt_sa_tx_done(pim);
 }
 
 void pim_msdp_pkt_sa_tx_one(struct pim_msdp_sa *sa)
 {
-	pim_msdp_pkt_sa_fill_hdr(sa->pim, 1 /* cnt */);
+	pim_msdp_pkt_sa_fill_hdr(sa->pim, 1 /* cnt */,
+				 sa->pim->msdp.originator_id);
 	pim_msdp_pkt_sa_fill_one(sa);
 	pim_msdp_pkt_sa_push(sa->pim, NULL);
+	pim_msdp_pkt_sa_tx_done(sa->pim);
+}
+
+/* when receiving a new SA, forward SA to all other peers */
+void pim_msdp_pkt_sa_tx_one_to_other_peers(struct pim_msdp_sa *sa)
+{
+	struct listnode *mpnode;
+	struct pim_msdp_peer *mp;
+
+	pim_msdp_pkt_sa_fill_hdr(sa->pim, 1 /* cnt */,  sa->rp);
+	pim_msdp_pkt_sa_fill_one(sa);
+	for (ALL_LIST_ELEMENTS_RO(sa->pim->msdp.peer_list, mpnode, mp)) {
+		/* Don't forward to peer which SA was received from */
+		if (mp->peer.s_addr != sa->peer.s_addr) {
+			pim_msdp_pkt_sa_push(sa->pim, mp);
+		}
+	}
 	pim_msdp_pkt_sa_tx_done(sa->pim);
 }
 
