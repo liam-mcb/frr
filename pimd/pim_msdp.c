@@ -1551,6 +1551,9 @@ int pim_msdp_config_write(struct pim_instance *pim, struct vty *vty,
 	int count = 0;
 
 	for (ALL_LIST_ELEMENTS_RO(pim->msdp.peer_list, mpnode, mp)) {
+		/* Ignore peers which belong to the mesh group */
+		if (!strcmp(mp->mesh_group_name, mg->mesh_group_name))
+			continue;
 		pim_inet4_dump("<peer?>", mp->peer, peer_str, sizeof(peer_str));
 		pim_inet4_dump("<local?>", mp->local, src_str, sizeof(src_str));
 		vty_out(vty, "%sip msdp peer %s source %s\n", spaces,
